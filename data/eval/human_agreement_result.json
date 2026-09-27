@@ -1,0 +1,38 @@
+{
+  "n": 20,
+  "dims": {
+    "relevance": {
+      "human": 1.0,
+      "judge": 0.98,
+      "exact": 0.6,
+      "tol": 1.0
+    },
+    "accuracy": {
+      "human": 1.0,
+      "judge": 0.985,
+      "exact": 0.75,
+      "tol": 1.0
+    },
+    "completeness": {
+      "human": 0.95,
+      "judge": 0.867,
+      "exact": 0.1,
+      "tol": 0.8
+    },
+    "helpfulness": {
+      "human": 1.0,
+      "judge": 0.929,
+      "exact": 0.1,
+      "tol": 1.0
+    },
+    "compliance": {
+      "human": 1.0,
+      "judge": 0.995,
+      "exact": 0.95,
+      "tol": 1.0
+    }
+  },
+  "overall_exact": 0.5,
+  "overall_tol": 0.96,
+  "big_gaps": []
+}

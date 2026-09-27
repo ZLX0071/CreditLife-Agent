@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "scene": "银行信用卡智能客服（EchoMind 金融版）",
+  "scene": "银行信用卡智能客服（CreditLife 金融版）",
   "design": "意图评测 30 条（正例/变体/对抗 三层各覆盖 9 个细分意图 + 3 个泛化意图）+ 对话评测 20 条（单轮业务 12 / 多轮场景 4 / 合规对抗 4）",
   "intent_cases": [
     {"message": "我的信用卡申请进度在哪里查询？", "expected_intent": "order_status", "context": {"layer": "easy"}},

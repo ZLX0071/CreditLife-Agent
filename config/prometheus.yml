@@ -1,21 +1,21 @@
-# Prometheus 配置文件 — EchoMind 智能客服系统
+# Prometheus 配置文件 — CreditLife 智能客服系统
 
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
   external_labels:
-    cluster: 'echomind'
+    cluster: 'creditlife'
     environment: 'production'
 
 rule_files: []
 
 scrape_configs:
-  # EchoMind 主应用指标
-  - job_name: 'echomind-app'
+  # CreditLife 主应用指标
+  - job_name: 'creditlife-app'
     static_configs:
-      - targets: ['echomind:8000']
+      - targets: ['creditlife:8000']
         labels:
-          service: 'echomind'
+          service: 'creditlife'
     scrape_interval: 10s
     metrics_path: '/metrics'
 
