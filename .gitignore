@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+
+# 环境变量（含敏感信息）—— 绝不上传
+.env
+
+# 向量库持久化与本地运行产物（demo_docs 语料与 eval 评测集需要展示，不忽略）
+data/chroma/
+logs/
+
+# 原教学项目配套材料（非本仓库内容）
+wiki/
+2026*.md
+__MACOSX/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker 构建产物
+build-image*.sh
+run-image*.sh
+docker-deploy.sh
+
+# ChromaDB 本地数据
+*.sqlite3
+
+# 备份文件
+*~
+*.bak
+docker-compose(1).yml
