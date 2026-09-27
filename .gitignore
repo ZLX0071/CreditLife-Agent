@@ -43,3 +43,4 @@ docker-deploy.sh
 *.bak
 docker-compose(1).yml
 docs/面试问答手册.md
+docs/演示脚本.md
