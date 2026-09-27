@@ -104,6 +104,8 @@ curl -X POST http://localhost:8000/eval/run -H "Content-Type: application/json" 
 | [docs/使用指南.md](docs/使用指南.md) | 部署、接口总览、双业务线 Skills、知识库、三层记忆查看、监控评测、排障 |
 | [docs/技术亮点.md](docs/技术亮点.md) | 八个核心设计的"解决什么问题 / 当前实现 / 设计意义" |
 | [docs/架构图.md](docs/架构图.md) | 整体架构 / chat 主链路 / 双线 Skill 注入 / 存储架构 / 监控评测闭环（Mermaid） |
+| [docs/用户旅程与业务流程.md](docs/用户旅程与业务流程.md) | 用户旅程 / 服务蓝图 / 逾期协商流程 / 合规拦截三层兜底 / 会话与熔断状态机 |
+| [docs/指标体系与成本模型.md](docs/指标体系与成本模型.md) | 指标树 / 延迟预算表（实测归因）/ 单位成本模型 / AB 验证计划 |
 | [docs/评测报告.md](docs/评测报告.md) | 评测口径、多轮结果对比、badcase 归因与披露 |
 | [docs/PRD-CreditLife-Agent.md](docs/PRD-CreditLife-Agent.md) | 产品需求一页纸（北极星指标、P0-P2、ADR） |
 | [docs/竞品分析-AI客服.md](docs/竞品分析-AI客服.md) | 招行小招 / 马上消费 GCOLO 深拆与定位判断 |
@@ -117,6 +119,10 @@ curl -X POST http://localhost:8000/eval/run -H "Content-Type: application/json" 
 
 ## Roadmap
 
+- 流式输出（SSE）：端到端延迟不变，首字 <2s——当前长回答非流式，感知等待 15s+（归因见[指标体系与成本模型](docs/指标体系与成本模型.md) §2）
+- 回答长度规范（Skill 约束"先结论、≤300 字"）：输出 token 减半，延迟与成本双降，需重评测确认完整性不回退
+- 意图识别与查询改写并行化 / 高置信意图跳过重排：RAG 命中场景 -3~5s
+- 意图识别切轻量模型（qwen-turbo）：延迟+成本双降，采用前需重跑意图评测集
 - Skills 关键词触发的语义匹配兜底（当前为字符串包含匹配，口语化表达可能漏召回）
 - Embedding 分支接入真正的中文语义向量模型（当前为本地字符 n-gram 哈希，非真语义匹配）
 - 完整对话记录持久化（当前仅保留工作记忆/摘要/画像，用户无法回溯全量历史）
