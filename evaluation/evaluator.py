@@ -263,6 +263,7 @@ class EndToEndEvaluator:
         self,
         intent_cases:    Optional[List[IntentTestCase]] = None,
         dialog_cases:    Optional[List[Dict[str, Any]]] = None,
+        save_baseline:   bool = False,
     ) -> EvalReport:
         """
         运行完整评测。
@@ -333,7 +334,9 @@ class EndToEndEvaluator:
             results=results,
         )
         self._history.append(report)
-        self._save_baseline(report)
+        # 仅显式要求时才写入基线存档，避免零星试跑冲掉完整评测基线
+        if save_baseline:
+            self._save_baseline(report)
         return report
 
     async def _evaluate_dialog_case(self, case: Dict[str, Any], case_idx: int) -> List[EvalResult]:

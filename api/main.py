@@ -483,9 +483,14 @@ class EvalDialogInput(BaseModel):
 
 
 class EvalRunInput(BaseModel):
-    """评测请求。为空时使用内置默认用例。"""
+    """评测请求。为空时使用内置默认用例。
+
+    save_baseline: 是否把本次结果写入回归基线存档（EVAL_BASELINE_PATH）。
+    默认 False——零星试跑不污染基线；只有完整评测集跑完才显式置 True。
+    """
     intent_cases: Optional[List[EvalIntentInput]] = None
     dialog_cases: Optional[List[EvalDialogInput]] = None
+    save_baseline: bool = False
 
 
 @app.post("/knowledge/add", tags=["知识库"])
@@ -601,6 +606,7 @@ async def run_eval(body: Optional[EvalRunInput] = None):
     report = await _evaluator.run(
         intent_cases=intent_cases,
         dialog_cases=dialog_cases,
+        save_baseline=bool(body.save_baseline) if body else False,
     )
     return {
         "pass_rate":       report.pass_rate,

@@ -92,7 +92,7 @@ docker compose up -d --build
 curl -X POST http://localhost:8000/chat -H "Content-Type: application/json" \
   -d '{"message":"我的信用卡最低还款会影响征信吗？","user_id":"u1","conv_id":"c1"}'
 
-# 5. 评测（约 94 条用例，会消耗 LLM 额度）
+# 5. 评测（约 94 条用例，会消耗 LLM 额度；save_baseline=true 才写入回归基线存档）
 curl -X POST http://localhost:8000/eval/run -H "Content-Type: application/json" \
   -d @data/eval/creditlife_eval_cases.json
 ```
