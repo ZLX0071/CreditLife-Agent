@@ -10,7 +10,7 @@ CreditLife-Agent 不是单纯的聊天机器人，而是把以下能力串成闭
 - **细粒度意图识别**：LLM + Embedding + 规则三路打分，18 类意图、意图组归一化、结构化实体提取
 - **路由驱动的多 Agent 编排**：账单服务 / 技术支持 / 综合接待 / 人工交接四类 Agent，主辅协作、降级兜底、意图+关键词双信号检测复合问题
 - **双业务线 Skill 体系**：信用卡与贷后两套话术规范按关键词精确分流注入，互不污染
-- **意图驱动 RAG**：17 篇信贷业务语料（息费规则、分期、争议处理、催收红线、征信异议）向量化检索，回答有据可依
+- **意图驱动 RAG**：15 篇信贷业务语料（息费规则、分期、争议处理、催收红线、征信异议）向量化检索，回答有据可依
 - **三级记忆**：Redis 工作记忆 + 会话摘要 + ChromaDB 情景记忆与用户画像，自动压缩防上下文膨胀
 - **工具可靠性治理**：TTL 缓存、熔断器、fallback 降级、查询改写、LLM 重排、缓存主动失效
 - **合规优先**：催收红线手册（GB/T 45251-2025 口径）、危机干预分支（心理援助热线转介）、绝对化表述拦截
@@ -32,7 +32,7 @@ CreditLife-Agent 不是单纯的聊天机器人，而是把以下能力串成闭
 | 规则注入 | 动态 Skills（Markdown 热加载） | 业务规范与合规护栏 |
 | 监控 | Prometheus + 自研 PerformanceMonitor（路由降权） | 在线健康度 |
 | 评测 | LLM-as-Judge + 回归基线 + 双 Judge 校准脚本 | 质量闭环 |
-| 部署 | Docker Compose（app/Redis/ChromaDB/Prometheus/Nginx） | 一键全栈 |
+| 部署 | Docker Compose（app/Redis/ChromaDB/Prometheus/Nginx/调试前端） | 一键全栈 |
 
 ## RAG 设计（重点）
 
@@ -81,21 +81,36 @@ CreditLife-Agent 不是单纯的聊天机器人，而是把以下能力串成闭
 # 1. 配置 .env（Anthropic 协议兼容的模型服务，示例为阿里云百炼 qwen）
 cp .env.example .env
 
-# 2. 一键全栈
+# 2. 一键全栈（含调试前端）
 docker compose up -d --build
 
-# 3. 冒烟
+# 3. 浏览器对话（推荐，无需配置）
+#    打开 http://localhost:5173 直接发消息，右侧面板显示意图/路由/耗时
+#    Swagger 调试台：http://localhost:8000/docs
+
+# 4. 冒烟
 curl -X POST http://localhost:8000/chat -H "Content-Type: application/json" \
   -d '{"message":"我的信用卡最低还款会影响征信吗？","user_id":"u1","conv_id":"c1"}'
 
-# 4. 评测
+# 5. 评测（约 94 条用例，会消耗 LLM 额度）
 curl -X POST http://localhost:8000/eval/run -H "Content-Type: application/json" \
   -d @data/eval/creditlife_eval_cases.json
 ```
 
+## 文档索引
+
+| 文档 | 内容 |
+|------|------|
+| [docs/使用指南.md](docs/使用指南.md) | 部署、接口总览、双业务线 Skills、知识库、三层记忆查看、监控评测、排障 |
+| [docs/技术亮点.md](docs/技术亮点.md) | 八个核心设计的"解决什么问题 / 当前实现 / 设计意义" |
+| [docs/架构图.md](docs/架构图.md) | 整体架构 / chat 主链路 / 双线 Skill 注入 / 存储架构 / 监控评测闭环（Mermaid） |
+| [docs/评测报告.md](docs/评测报告.md) | 评测口径、多轮结果对比、badcase 归因与披露 |
+| [docs/PRD-CreditLife-Agent.md](docs/PRD-CreditLife-Agent.md) | 产品需求一页纸（北极星指标、P0-P2、ADR） |
+| [docs/竞品分析-AI客服.md](docs/竞品分析-AI客服.md) | 招行小招 / 马上消费 GCOLO 深拆与定位判断 |
+
 ## 改动清单（相对电商客服基线）
 
-1. **场景改编**：5 个 Skill 话术规范（信用卡×2 + 贷后×2 + 共享技术）、19 篇业务语料、意图模板金融化（订单→办卡/放款进度、物流→卡片邮寄等语义映射）、4 类 Agent 角色契约适配信贷业务
+1. **场景改编**：5 个 Skill 话术规范（信用卡×2 + 贷后×2 + 共享技术）、15 篇业务语料、意图模板金融化（订单→办卡/放款进度、物流→卡片邮寄等语义映射）、4 类 Agent 角色契约适配信贷业务
 2. **合规与安全**：LLM-as-Judge 新增 compliance 维度（含催收红线 15 条）；对话用例 `expected_behavior` 定向评判；EscalationAgent 危机干预分支（确定性代码，不依赖概率模型）
 3. **评测工程**：94 条分层评测集 + 标注规范；双 Judge 校准脚本；`EVAL_JUDGE_MODEL` 独立配置
 4. **工程修复与增强**：知识库播种从硬编码改为目录化（`KNOWLEDGE_SEED_DIR`，语料与代码分离）；修复 ChromaDB 多条件 where 未用 `$and` 的缺陷；修复 RAG 工具引导策略缺失导致的检索 0 触发；修复辅助 Agent 浮动门槛与复合问题兜底缺失；修复 Pattern 跨意图组修正；知识库更新后检索缓存主动失效
