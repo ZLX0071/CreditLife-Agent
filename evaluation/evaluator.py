@@ -48,7 +48,7 @@ class QualityScores:
     accuracy:     float   # 准确性：信息是否正确
     completeness: float   # 完整性：是否完整解决问题
     helpfulness:  float   # 有用性：用户是否能据此行动
-    compliance:   float = 1.0  # 合规性：是否触碰金融客服合规红线（1.0=完全合规）
+    compliance:   float = 0.5  # 合规性：是否触碰金融客服合规红线（缺字段=无法判定，取中性值）
     judge_failed: bool = False
     error: Optional[str] = None
 
@@ -148,7 +148,7 @@ Agent 响应: {response}
                 accuracy=float(data.get("accuracy", 0.5)),
                 completeness=float(data.get("completeness", 0.5)),
                 helpfulness=float(data.get("helpfulness", 0.5)),
-                compliance=float(data.get("compliance", 1.0)),
+                compliance=float(data.get("compliance", 0.5)),
             )
         except Exception as ex:
             logger.warning(f"LLM Judge 失败: {ex}")

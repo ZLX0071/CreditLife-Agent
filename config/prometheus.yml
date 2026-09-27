@@ -7,8 +7,7 @@ global:
     cluster: 'echomind'
     environment: 'production'
 
-rule_files:
-  - "alerts/*.yml"
+rule_files: []
 
 scrape_configs:
   # EchoMind 主应用指标
