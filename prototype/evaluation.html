@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CreditLife 工作台 — 评测看板</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">C</div>
+      <div>
+        <div class="brand-name">CreditLife</div>
+        <div class="brand-sub">Agent Console</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <div class="nav-title">工作区</div>
+      <a href="index.html">对话 · 决策透明面板</a>
+      <a href="compliance.html">合规拦截 · 危机干预</a>
+      <a class="active" href="evaluation.html">评测看板</a>
+    </nav>
+    <nav class="nav">
+      <div class="nav-title">回归门禁</div>
+      <a>第 1 轮 · 零退化</a>
+      <a>第 2 轮 · 零退化</a>
+      <a>第 3 轮 · 零退化</a>
+    </nav>
+    <div class="sidebar-foot">
+      分维度数值详见 docs/评测报告.md；<br>本看板仅呈现已发布口径。
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="page-head">
+      <h1>评测看板</h1>
+      <p>94 条分层评测集 · 五维 LLM-as-Judge（含新增合规维度）· 双 Judge 交叉校准 · 人工抽标 · 回归门禁。运行方式：POST /eval/run 全链路实测。</p>
+    </div>
+
+    <!-- KPI 行 -->
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="label">评测集规模</div>
+        <div class="value">94 <span style="font-size:14px; color:var(--text-dim); font-weight:500;">条</span></div>
+        <div class="note">意图 54 + 对话 40</div>
+      </div>
+      <div class="kpi">
+        <div class="label">五维均分</div>
+        <div class="value">0.95</div>
+        <div class="note">含合规维度</div>
+      </div>
+      <div class="kpi">
+        <div class="label">合规维度</div>
+        <div class="value accent">1.00</div>
+        <div class="note">12 条对抗全部正确处理</div>
+      </div>
+      <div class="kpi">
+        <div class="label">用例通过率</div>
+        <div class="value">96.6<span style="font-size:14px; color:var(--text-dim); font-weight:500;">%</span></div>
+        <div class="note">57 / 59 项</div>
+      </div>
+      <div class="kpi">
+        <div class="label">回归检测</div>
+        <div class="value" style="font-size:20px; padding-top:6px;">三轮零退化</div>
+        <div class="note">与前轮基线自动比对</div>
+      </div>
+    </div>
+
+    <div style="height:32px;"></div>
+
+    <div class="grid-2">
+      <!-- 左列 -->
+      <div style="display:flex; flex-direction:column; gap:32px;">
+        <!-- 评测集构成 -->
+        <section class="card card-pad">
+          <div class="card-title">评测集构成 · 94 条分层</div>
+          <div class="stackbar">
+            <i style="width:31.9%; background:var(--brand-600);">30</i>
+            <i style="width:25.5%; background:var(--brand-500);">24</i>
+            <i style="width:21.3%; background:var(--blue-600);">20</i>
+            <i style="width:10.6%; background:var(--blue-800);">10</i>
+            <i style="width:10.6%; background:var(--ink-700);">10</i>
+          </div>
+          <div class="legend">
+            <span><i style="background:var(--brand-600);"></i>意图·信用卡 30</span>
+            <span><i style="background:var(--brand-500);"></i>意图·贷后 24</span>
+            <span><i style="background:var(--blue-600);"></i>对话·单轮 20</span>
+            <span><i style="background:var(--blue-800);"></i>对话·多轮 10</span>
+            <span><i style="background:var(--ink-700);"></i>对话·合规对抗 10</span>
+          </div>
+          <div class="note">分层目的：正例看基础准确率，变体看鲁棒性，对抗看安全护栏——对抗与边界用例刻意超配。</div>
+        </section>
+
+        <!-- 五维柱状 -->
+        <section class="card card-pad">
+          <div class="card-title">LLM-as-Judge 五维评分</div>
+          <div style="position:relative; display:flex; align-items:flex-end; gap:28px; height:220px; padding:0 8px; border-left:1px solid var(--line); border-bottom:1px solid var(--line);">
+            <!-- 均分参考线 -->
+            <div style="position:absolute; left:0; right:0; bottom:95%; border-top:2px dashed var(--amber-600); z-index:1;">
+              <span style="position:absolute; right:0; top:-20px; font-size:11px; color:var(--amber-700); font-weight:600;">均分 0.95</span>
+            </div>
+            <div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%;">
+              <div style="height:98%; background:var(--brand-500); border-radius:6px 6px 0 0; opacity:.85;"></div>
+            </div>
+            <div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%;">
+              <div style="height:97.4%; background:var(--brand-500); border-radius:6px 6px 0 0; opacity:.85;"></div>
+            </div>
+            <div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%;">
+              <div style="height:87.3%; background:var(--brand-500); border-radius:6px 6px 0 0; opacity:.85;"></div>
+            </div>
+            <div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%;">
+              <div style="height:92.9%; background:var(--brand-500); border-radius:6px 6px 0 0; opacity:.85;"></div>
+            </div>
+            <div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%;">
+              <div style="height:100%; background:var(--brand-600); border-radius:6px 6px 0 0; position:relative;">
+                <span style="position:absolute; top:-26px; left:50%; transform:translateX(-50%); font-size:13px; font-weight:700; color:var(--brand-600); font-variant-numeric:tabular-nums;">1.00</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; gap:28px; padding:8px 8px 0; border-left:1px solid transparent;">
+            <div style="flex:1; text-align:center; font-size:12px; color:var(--text-dim);">相关性</div>
+            <div style="flex:1; text-align:center; font-size:12px; color:var(--text-dim);">准确性</div>
+            <div style="flex:1; text-align:center; font-size:12px; color:var(--text-dim);">完整性</div>
+            <div style="flex:1; text-align:center; font-size:12px; color:var(--text-dim);">有用性</div>
+            <div style="flex:1; text-align:center; font-size:12px; color:var(--brand-600); font-weight:700;">合规性</div>
+          </div>
+          <div class="note">合规维度为本项目新增（0 / 0.5 / 1 三档红线量规）；分维度数值见 docs/评测报告.md。</div>
+        </section>
+      </div>
+
+      <!-- 右列 -->
+      <div style="display:flex; flex-direction:column; gap:32px;">
+        <!-- 意图双口径 -->
+        <section class="card card-pad">
+          <div class="card-title">意图准确率 · 双口径（54 条）</div>
+          <div class="hbar">
+            <span class="name">严格单标签</span>
+            <span class="track"><i style="width:74.1%;"></i></span>
+            <span class="val">74.1%</span>
+          </div>
+          <div class="hbar">
+            <span class="name">意图组级</span>
+            <span class="track"><i style="width:77.8%; background:linear-gradient(90deg, var(--blue-600), var(--blue-800));"></i></span>
+            <span class="val">77.8%</span>
+          </div>
+          <div class="hbar">
+            <span class="name">信用卡线</span>
+            <span class="track"><i style="width:93.3%; background:linear-gradient(90deg, var(--ok-600), var(--ok-700));"></i></span>
+            <span class="val">93.3%</span>
+          </div>
+          <div class="note">双口径呈现：贷后线部分错误为标签边界歧义（判定规则见标注规范），单标签口径对边界场景失真。</div>
+        </section>
+
+        <!-- 校准 -->
+        <section class="card card-pad">
+          <div class="card-title">Judge 可信度 · 两层校准</div>
+          <div class="kv"><span class="k">双 Judge 交叉</span><span class="v">20 条复评 · 合规维度零分歧</span></div>
+          <div class="kv"><span class="k">各维度偏差</span><span class="v num">≤ 0.11</span></div>
+          <div class="kv"><span class="k">人工抽标</span><span class="v">20 条 · ±0.25 容差一致率 96%</span></div>
+          <div class="kv"><span class="k">偏差方向</span><span class="v">Judge 保守，不偏袒被测系统</span></div>
+          <div class="note">单靠 Judge 互查不能自证清白——人工抽标是外部锚点。</div>
+        </section>
+
+        <!-- 回归趋势 -->
+        <section class="card card-pad">
+          <div class="card-title">回归门禁 · 三轮趋势</div>
+          <div class="timeline">
+            <div class="tl-node">
+              <div class="step">第 1 轮 · 基线</div>
+              <div class="t">零退化</div>
+              <div class="note">建立回归基线，发现 RAG 零触发并修复</div>
+            </div>
+            <div class="tl-node">
+              <div class="step">第 2 轮 · 修复验证</div>
+              <div class="t">零退化</div>
+              <div class="note">Pattern 词库金融化 72.2% → 74.1%</div>
+            </div>
+            <div class="tl-node" style="border-color:var(--ok-line); background:var(--ok-bg);">
+              <div class="step" style="color:var(--ok-700);">第 3 轮 · 终验</div>
+              <div class="t" style="color:var(--ok-700);">零退化</div>
+              <div class="note">危机干预前置 + 全量 94 条终验</div>
+            </div>
+          </div>
+          <div class="note">每次 Prompt 迭代必须跑全量评测集——改了不验，等于没改。</div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

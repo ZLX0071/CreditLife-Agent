@@ -141,6 +141,14 @@ flowchart TB
 | 双线分流 | 同一句"还款"在信用卡语境与贷款语境各发一次 | 日志可见命中不同 Skill 规范 |
 | 评测闭环 | 运行评测集 | 五维评分 + 合规维度 + 回归检测 |
 
+**高保真前端原型（Design Case）**：`prototype/` 内含 3 个静态高保真界面——对话主界面（右侧"决策透明面板"可视化 routing_reason）、合规拦截与危机干预双态（3.2s 确定性分支 vs 15.1s 常规路径对比）、评测看板（94 条分层构成 / 五维评分 / 意图双口径 / 回归门禁）。设计说明见 [prototype/README.md](prototype/README.md)。
+
+| Design Case 截图 | |
+|------|------|
+| 对话主界面 · 决策透明面板 | ![对话主界面](prototype/screenshots/chat-decision-panel.png) |
+| 合规拦截 · 危机干预双态 | ![合规与危机](prototype/screenshots/compliance-crisis-states.png) |
+| 评测看板 | ![评测看板](prototype/screenshots/evaluation-dashboard.png) |
+
 **本地一键体验**：
 
 ```bash

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CreditLife 工作台 — 合规拦截 · 危机干预</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">C</div>
+      <div>
+        <div class="brand-name">CreditLife</div>
+        <div class="brand-sub">Agent Console</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <div class="nav-title">工作区</div>
+      <a href="index.html">对话 · 决策透明面板</a>
+      <a class="active" href="compliance.html">合规拦截 · 危机干预</a>
+      <a href="evaluation.html">评测看板</a>
+    </nav>
+    <nav class="nav">
+      <div class="nav-title">系统状态</div>
+      <a>Skill 规范 · 5 已加载</a>
+      <a>红线手册 · 15 条已注入</a>
+      <a>危机分支 · 就绪</a>
+    </nav>
+    <div class="sidebar-foot">
+      安全关键路径零概率依赖：<br>能确定的，绝不用概率模型。
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="page-head">
+      <h1>合规拦截 · 危机干预</h1>
+      <p>两种关键交互态：违规话术在生成前被护栏拦截；危机场景由确定性代码在 3.2 秒内接管，不经过任何模型生成环节。</p>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start;">
+      <!-- 状态一：合规拦截 -->
+      <section class="card card-pad">
+        <div class="card-title">状态一 · 合规拦截（生成前护栏）</div>
+
+        <div class="chat">
+          <div class="msg user">
+            <div class="who">客</div>
+            <div class="bubble">推荐个稳赚不赔的理财</div>
+          </div>
+
+          <div class="msg agent" style="display:block;">
+            <div class="guard-card" style="margin-bottom:12px;">
+              <div class="guard-tag">触发合规护栏 · 命中红线：收益承诺类</div>
+              <div style="font-size:13px; color:var(--red-700); line-height:1.7;">
+                输入包含"稳赚不赔"确定性收益表述。依据 Skill 规范与 15 条红线：不得承诺收益、不得暗示保本。该请求已在生成前拦截，未进入话术生成环节。
+              </div>
+            </div>
+
+            <div class="bubble" style="max-width:100%;">
+              根据金融监管规定，我不能推荐具体理财产品，也不能承诺"稳赚不赔"或任何收益。所有理财产品均存在风险，过往业绩不预示未来表现，投资需谨慎。<br><br>
+              如您想了解在售理财信息，建议：<br>
+              ✅ 登录官方手机银行 APP，查看产品说明书与风险评级（R1–R5）<br>
+              ✅ 拨打信用卡背面官方客服热线，由持证人员介绍<br><br>
+              以上信息以官方披露为准。
+              <div class="meta">主 Agent：综合接待 · Skill 已注入（关键词：理财）· 知识库未使用</div>
+            </div>
+
+            <div style="margin-top:12px; display:flex; gap:10px;">
+              <button class="btn">转人工咨询</button>
+              <button class="btn ghost-ink">查看官方渠道</button>
+            </div>
+          </div>
+        </div>
+
+        <hr class="divider">
+        <div class="note">拦截发生在生成前：护栏命中后，红线卡片先于任何话术输出——"事前拦截，而非事后补救"。</div>
+      </section>
+
+      <!-- 状态二：危机干预 -->
+      <section class="card card-pad">
+        <div class="card-title">状态二 · 危机干预（确定性分支）</div>
+
+        <div class="chat">
+          <div class="msg user">
+            <div class="who">客</div>
+            <div class="bubble">我不想活了，欠了这么多钱还不上了，跳下去就解脱了</div>
+          </div>
+
+          <div class="msg agent" style="display:block;">
+            <div class="guard-card care" style="margin-bottom:12px;">
+              <div class="guard-tag">危机干预 · 确定性分支已接管（不经 LLM）</div>
+              <div style="font-size:13px; color:var(--ok-700); line-height:1.7;">
+                路由层最前置的危机关键词命中，触发预先写定的响应流程：停止还款话题 → 共情安抚 → 心理援助热线 → 强制转人工。
+              </div>
+            </div>
+
+            <div class="bubble care" style="max-width:100%; background:var(--ok-bg); border:1px solid var(--ok-line); border-radius:10px; padding:16px 20px;">
+              听到您现在这么说，我很担心您。先暂停所有业务话题，您的人身安全永远是第一位的。<br><br>
+              如果您愿意，请拨打全国心理援助热线 <strong>12356</strong>，或告诉身边您信任的人，让专业的人陪您聊一聊。<br><br>
+              我已将您的会话标记为最高优先级，人工同事会尽快与您联系。任何情况下，请记住：困难是暂时的，办法总比困难多。
+              <div class="meta">会话已强制升级 · 还款相关话题已全部挂起</div>
+            </div>
+
+            <div style="margin-top:12px;">
+              <button class="btn care">人工已介入（最高优先级）</button>
+            </div>
+          </div>
+        </div>
+
+        <hr class="divider">
+        <!-- 速度感对比 -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:14px;">
+          <div style="background:var(--surface-0); border:1px solid var(--line); border-radius:8px; padding:12px 16px;">
+            <div style="font-size:11px; color:var(--text-dim); letter-spacing:.08em;">常规生成路径（LLM 链路）</div>
+            <div class="num" style="font-size:20px; font-weight:700; color:var(--text-body);">15.1 s</div>
+          </div>
+          <div style="background:var(--ok-bg); border:1px solid var(--ok-line); border-radius:8px; padding:12px 16px;">
+            <div style="font-size:11px; color:var(--ok-700); letter-spacing:.08em;">确定性分支 · 实测</div>
+            <div class="num" style="font-size:20px; font-weight:700; color:var(--ok-700);">3.2 s</div>
+          </div>
+        </div>
+        <div class="note">确定性分支跳过意图投票与全部模型生成环节——安全路径零概率依赖，响应内容每次一字不差。</div>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>

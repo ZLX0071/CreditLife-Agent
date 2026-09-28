@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CreditLife 工作台 — 对话与决策透明面板</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">C</div>
+      <div>
+        <div class="brand-name">CreditLife</div>
+        <div class="brand-sub">Agent Console</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <div class="nav-title">工作区</div>
+      <a class="active" href="index.html">对话 · 决策透明面板</a>
+      <a href="compliance.html">合规拦截 · 危机干预</a>
+      <a href="evaluation.html">评测看板</a>
+    </nav>
+    <nav class="nav">
+      <div class="nav-title">系统状态</div>
+      <a>Skill 规范 · 5 已加载</a>
+      <a>知识库 · 15 篇 / 23 切片</a>
+      <a>工具熔断器 · closed</a>
+    </nav>
+    <div class="sidebar-foot">
+      路由理由与工具调用全量可观测。<br>演示数据来自真实运行记录。
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="page-head">
+      <h1>对话 · 决策透明面板</h1>
+      <p>routing_reason 全量可观测：每一次意图识别、路由打分、知识检索与规范注入都有据可查。</p>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 340px; gap: 32px; align-items:start;">
+      <!-- 对话流 -->
+      <section>
+        <div class="chat">
+          <div class="msg user">
+            <div class="who">客</div>
+            <div class="bubble">信用卡分期手续费怎么算？</div>
+          </div>
+
+          <div class="msg agent">
+            <div class="who">AI</div>
+            <div class="bubble">
+              关于信用卡分期手续费的计算，我需要先说明以下几点关键规则，并明确哪些内容需要结合您的卡种核验：<br><br>
+              <strong>✅ 当前可确认的事实（基于知识库通用规则）：</strong><br>
+              • 分期手续费通常按<strong>分期总金额 × 每期费率 × 期数</strong>收取，或按一次性总额收取，具体取决于账单分期 / 消费分期 / 现金分期类型；<br>
+              • 费率因卡等级（普卡 / 金卡 / 白金卡）与期数（3 / 6 / 12 / 24 期）而异，以您办理时页面展示的《分期业务条款》为准；<br>
+              • 手续费一般<strong>不因提前结清而退还</strong>，且分期占用可用额度。<br><br>
+              <strong>🔍 需要核验的信息：</strong>请提供卡号后四位（无需完整卡号），我将调取对应卡种的官方费率口径逐项说明。
+              <div class="meta">主 Agent：账单服务 · 知识库已引用 · 以上口径以官方披露为准</div>
+            </div>
+          </div>
+
+          <div class="lowconf" style="margin-left:44px;">
+            低置信提示：本条消息识别置信度偏低（涉及多种分期类型），已引导用户补充卡产品信息后重新作答。
+          </div>
+
+          <div class="msg user">
+            <div class="who">客</div>
+            <div class="bubble">账单分期，白金卡，12 期</div>
+          </div>
+        </div>
+
+        <!-- 输入区 -->
+        <div style="margin-top:24px; display:flex; gap:12px; align-items:flex-start;">
+          <div style="flex:1; background:var(--surface-1); border:1px solid var(--line); border-radius:10px; padding:12px 16px; color:var(--text-dim); font-size:13px;">
+            输入消息…（Ctrl + Enter 发送）
+          </div>
+          <button class="btn primary">发送</button>
+          <button class="btn">转人工</button>
+        </div>
+      </section>
+
+      <!-- 决策透明面板 -->
+      <aside class="trace">
+        <div class="trace-sec">
+          <h4>意图识别</h4>
+          <div class="kv"><span class="k">细粒度意图</span><span class="v">billing（分期咨询）</span></div>
+          <div class="kv"><span class="k">意图组</span><span class="v">billing</span></div>
+          <div class="kv"><span class="k">融合置信度</span><span class="v num">75.0%</span></div>
+          <div style="margin-top:10px;">
+            <div class="meter"><span>LLM 路</span><span class="bar"><i style="width:95%"></i></span><span class="val">0.95</span></div>
+            <div class="meter"><span>向量路</span><span class="bar"><i style="width:17%"></i></span><span class="val">0.17</span></div>
+            <div class="meter"><span>规则路</span><span class="bar"><i style="width:50%"></i></span><span class="val">0.50</span></div>
+          </div>
+          <div class="note">三路加权投票 · 低置信时向确定性规则方向收敛</div>
+        </div>
+
+        <div class="trace-sec">
+          <h4>路由决策</h4>
+          <div class="kv"><span class="k">主 Agent</span><span class="v">账单服务（billing）</span></div>
+          <div class="kv"><span class="k">辅助 Agent</span><span class="v">无</span></div>
+          <div class="kv"><span class="k">置信度</span><span class="v num">75.0%</span></div>
+          <div class="cite" style="margin-top:10px; font-family:var(--mono); font-size:11px;">
+            intent=billing, group=billing, primary=billing,<br>
+            supporting=none,<br>
+            scores=[billing=0.75, general=0.10, technical=0.00]
+          </div>
+        </div>
+
+        <div class="trace-sec">
+          <h4>知识库引用</h4>
+          <div class="badge badge-green" style="margin-bottom:10px;"><span class="dot"></span>已使用 · Top-3 注入</div>
+          <div class="cite">
+            <div class="src">installment_rules.md · 片段 #2</div>
+            分期手续费通常按分期总金额 × 每期费率 × 期数方式收取；提前结清时剩余手续费是否退还，以《分期业务条款》约定为准。
+          </div>
+        </div>
+
+        <div class="trace-sec">
+          <h4>Skill 注入状态</h4>
+          <div class="kv"><span class="k">账单服务处理规范</span><span class="v badge badge-ok" style="border:none;padding:1px 8px;">已注入</span></div>
+          <div class="kv"><span class="k">触发关键词</span><span class="v">分期 / 账单</span></div>
+          <div class="kv"><span class="k">注入上限</span><span class="v num">8000 字符</span></div>
+        </div>
+
+        <div class="trace-sec">
+          <h4>本次请求</h4>
+          <div class="kv"><span class="k">端到端耗时</span><span class="v num">15.1 s</span></div>
+          <div class="kv"><span class="k">转人工</span><span class="v">否</span></div>
+          <div class="kv"><span class="k">危机拦截</span><span class="v">未触发</span></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+</body>
+</html>
