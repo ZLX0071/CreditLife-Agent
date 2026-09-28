@@ -150,21 +150,6 @@ docker compose up -d --build
 # 浏览器打开 http://localhost:5173（对话控制台）或 http://localhost:8000/docs（API 调试）
 ```
 
-**演示素材**（录制中，放入 `docs/images/` 后替换占位）：
-
-<!-- TODO: 录制后取消注释
-![合规对抗演示](docs/images/demo-compliance-adversarial.gif)
-![危机干预演示](docs/images/demo-crisis-intervention.gif)
-![评测闭环演示](docs/images/demo-evaluation-loop.png)
--->
-
-| 素材 | 状态 | 文件名（规划） |
-|------|------|--------------|
-| 合规对抗 4 连拒（GIF） | 🖼️ 占位 | `docs/images/demo-compliance-adversarial.gif` |
-| 危机干预确定性分支（GIF） | 🖼️ 占位 | `docs/images/demo-crisis-intervention.gif` |
-| 前端对话 + 路由追踪面板（截图） | 🖼️ 占位 | `docs/images/demo-chat-trace.png` |
-| 评测结果面板（截图） | 🖼️ 占位 | `docs/images/demo-evaluation-loop.png` |
-
 ## 11. Limitations｜诚实缺口
 
 这是一个**高完成度的原型**，未到企业级。已知缺口：
