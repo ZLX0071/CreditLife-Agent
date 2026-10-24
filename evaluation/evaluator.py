@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional
 
 from anthropic import AsyncAnthropic
 
+from core.config import DEFAULT_MODEL
 from core.llm_utils import extract_text_content
 
 from core.intent_recognizer import IntentCategory, IntentRecognizer
@@ -244,7 +245,7 @@ class EndToEndEvaluator:
         recognizer: IntentRecognizer,
         api_key:  str,
         base_url: Optional[str] = None,
-        model:    str = "claude-3-5-sonnet-20241022",
+        model:    str = DEFAULT_MODEL,
         baseline_path: Optional[str] = None,
     ):
         kwargs: Dict[str, Any] = {"api_key": api_key}

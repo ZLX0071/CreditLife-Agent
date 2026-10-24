@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 单元测试（不依赖外部服务与真实 LLM）
+        env:
+          ANTHROPIC_API_KEY: test-key-not-real
+        run: pytest tests -q
+
+      - name: 评测集结构门禁
+        run: python scripts/check_eval_dataset.py

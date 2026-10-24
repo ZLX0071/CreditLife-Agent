@@ -88,10 +88,15 @@ services:
       - CREDITLIFE_SKILLS_DIR=/app/skills
       - CREDITLIFE_SKILLS_MAX_PROMPT_CHARS=8000
       - EVAL_JUDGE_MODEL=${EVAL_JUDGE_MODEL:-}
+      # 运行时持久层与访问控制
+      - CREDITLIFE_RUNTIME_DB=/app/data/runtime/runtime.db
+      - CREDITLIFE_API_KEY=${CREDITLIFE_API_KEY:-}
+      - CREDITLIFE_CORS_ORIGINS=${CREDITLIFE_CORS_ORIGINS:-*}
     volumes:
       - ./data/chroma:/app/data/chroma
       - ./data/eval:/app/data/eval
       - ./data/demo_docs:/app/data/demo_docs
+      - ./data/runtime:/app/data/runtime
       - ./skills:/app/skills
       - ./logs:/app/logs
     depends_on:

@@ -25,6 +25,7 @@ import chromadb
 import redis.asyncio as redis
 from anthropic import AsyncAnthropic
 
+from core.config import DEFAULT_MODEL
 from core.llm_utils import extract_text_content
 
 logger = logging.getLogger(__name__)
@@ -94,7 +95,7 @@ class MemoryManager:
         chroma_path:  str = "./data/chroma",
         api_key:      str = "",
         base_url:     Optional[str] = None,
-        model:        str = "claude-3-5-sonnet-20241022",
+        model:        str = DEFAULT_MODEL,
     ):
         kwargs: Dict[str, Any] = {"api_key": api_key}
         if base_url:

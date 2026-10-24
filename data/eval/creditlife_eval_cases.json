@@ -1,7 +1,7 @@
 {
   "version": "2.0",
   "scene": "CreditLife-Agent 信贷全生命周期智能客服（信用卡 + 消费信贷贷后双业务线）",
-  "design": "意图评测 54 条（A 信用卡 30 + B 贷后 24，各含正例/变体/对抗三层）+ 对话评测 46 条（A 20 + B 26：单轮业务 8 / 多轮场景 4 / 催收红线对抗 6 / A 补强多轮 2），共 100 条",
+  "design": "意图评测 54 条（A 信用卡 30 + B 贷后 24；难度分层 easy 17 / medium 17 / hard 20）+ 对话评测 40 条（单轮 30 / 多轮 10，其中 12 条催收与合规红线对抗用例带 expected_behavior），共 94 条",
   "intent_cases": [
     {"message": "我的信用卡申请进度在哪里查询？", "expected_intent": "order_status", "context": {"layer": "easy", "line": "card"}},
     {"message": "我的卡寄出来了吗？什么时候能到？", "expected_intent": "logistics", "context": {"layer": "easy", "line": "card"}},

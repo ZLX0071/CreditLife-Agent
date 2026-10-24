@@ -20,10 +20,13 @@ if _ROOT not in sys.path:
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Response, UploadFile, File
+from fastapi import Depends, FastAPI, HTTPException, Response, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pydantic import BaseModel, Field
+
+from core.config import CRISIS_KEYWORDS, DEFAULT_MODEL
+from core.runtime import RUN_ACTIVE, HANDOFF_PENDING, RuntimeStore, require_api_key
 
 load_dotenv()
 
@@ -49,6 +52,27 @@ _tool_manager = None
 _monitor      = None
 _evaluator    = None
 _skill_manager = None
+_runtime: Optional[RuntimeStore] = None
+
+# 需要 API Key 的路由共用本依赖；/health、/metrics 保持开放给探针和抓取。
+_PROTECTED = [Depends(require_api_key)]
+
+# ── 业务指标（/metrics 暴露，进程默认指标之外的可观测性）─────────────────────
+CHAT_TURNS = Counter(
+    "creditlife_chat_turns_total", "完成的对话轮次", ["intent_group", "escalated"]
+)
+RUN_LATENCY = Histogram(
+    "creditlife_run_latency_seconds", "对话运行端到端时延", ["agent_type"]
+)
+TURN_LOCK_CONFLICTS = Counter(
+    "creditlife_turn_lock_conflicts_total", "会话级执行锁冲突（409）"
+)
+HANDOFF_RESOLUTIONS = Counter(
+    "creditlife_handoff_resolutions_total", "人工确认门裁决", ["decision"]
+)
+RUN_CANCELLATIONS = Counter(
+    "creditlife_run_cancellations_total", "运行取消（人工/对账）", ["source"]
+)
 
 def _anthropic_cfg() -> Dict[str, Any]:
     key = os.getenv("ANTHROPIC_API_KEY", "")
@@ -56,7 +80,7 @@ def _anthropic_cfg() -> Dict[str, Any]:
         raise RuntimeError("未设置 ANTHROPIC_API_KEY")
     cfg: Dict[str, Any] = {
         "api_key":  key,
-        "model":    os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022").strip(),
+        "model":    os.getenv("ANTHROPIC_MODEL", DEFAULT_MODEL).strip(),
     }
     base_url = os.getenv("ANTHROPIC_BASE_URL", "").strip()
     if base_url:
@@ -66,7 +90,7 @@ def _anthropic_cfg() -> Dict[str, Any]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _orchestrator, _memory, _tool_manager, _monitor, _evaluator, _skill_manager
+    global _orchestrator, _memory, _tool_manager, _monitor, _evaluator, _skill_manager, _runtime
 
     print(BANNER, flush=True)
 
@@ -81,6 +105,23 @@ async def lifespan(app: FastAPI):
 
     cfg = _anthropic_cfg()
     logger.info(f"模型: {cfg['model']}  base_url: {cfg.get('base_url', '(官方)')}")
+
+    # 运行时持久层：会话/运行/事件/工单/审计落库（SQLite 单文件，可换 PostgreSQL）
+    runtime_db = os.getenv("CREDITLIFE_RUNTIME_DB", str(pathlib.Path(_ROOT) / "data" / "runtime.db"))
+    if runtime_db != ":memory:":
+        pathlib.Path(runtime_db).parent.mkdir(parents=True, exist_ok=True)
+    _runtime = RuntimeStore(runtime_db)
+    # 僵尸运行对账：上次进程在 create_run 与 finish_run 之间崩溃留下的
+    # running 记录，启动时统一归档为 cancelled（审计同事务），保证看板上
+    # 的 running 永远代表真的在跑。
+    stale_runs = _runtime.reconcile_stale_runs(
+        float(os.getenv("CREDITLIFE_RECONCILE_MAX_AGE_S", "600"))
+    )
+    for stale in stale_runs:
+        RUN_CANCELLATIONS.labels(source="reconcile").inc()
+    if stale_runs:
+        logger.warning("启动对账：归档 %d 条僵尸运行 -> %s", len(stale_runs), [r["run_id"] for r in stale_runs])
+    logger.info(f"运行时持久层: {runtime_db}")
 
     # 意图识别器（Orchestrator 内部也会创建，这里单独暴露给 Evaluator）
     recognizer = IntentRecognizer(
@@ -191,6 +232,8 @@ async def lifespan(app: FastAPI):
     await _monitor.stop()
     if _memory is not None:
         await _memory.close()
+    if _runtime is not None:
+        _runtime.close()
     logger.info("CreditLife 已关闭")
 
 
@@ -202,9 +245,11 @@ app = FastAPI(
     docs_url="/docs",
 )
 
+# CORS 来源由环境决定：默认放开便于本地演示，生产必须配置为明确域名列表。
+_cors_origins = [o.strip() for o in os.getenv("CREDITLIFE_CORS_ORIGINS", "*").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins or ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -219,6 +264,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     conv_id:     str
+    run_id:      str = ""
     request_id:  str = ""
     response:    str
     intent:      str
@@ -231,6 +277,8 @@ class ChatResponse(BaseModel):
     routing_reason: str = ""
     routing_confidence: float = 0.0
     escalated:   bool
+    ticket_id:   Optional[str] = None
+    revision_applied: Optional[Dict[str, Any]] = None
     latency_ms:  float
     knowledge_used: bool = False
     entities: Dict[str, List[str]] = Field(default_factory=dict)
@@ -264,7 +312,7 @@ async def skills_summary():
     return _skill_manager.summary()
 
 
-@app.post("/skills/reload", tags=["Skills"])
+@app.post("/skills/reload", tags=["Skills"], dependencies=_PROTECTED)
 async def reload_skills():
     """运行时重新扫描 Skill 目录，不需要重启服务。"""
     if _skill_manager is None:
@@ -275,137 +323,207 @@ async def reload_skills():
     return _skill_manager.summary()
 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat", response_model=ChatResponse, dependencies=_PROTECTED)
 async def chat(req: ChatRequest):
     """
     主对话接口。完整流程：
-      记忆读取 → 意图识别 → Agent 路由 → 执行 → 记忆写入
+      会话执行锁 → 持久化用户消息 → 意图识别 → Agent 路由 → 执行
+      → 事件/审计落库 →（升级时）创建待人工确认工单 → 记忆写入
+
+    运行全程落库（runs + run_events）；同一会话并发请求返回 409，
+    断线后可通过 GET /runs/{run_id}/events 增量回放。
     """
-    if _orchestrator is None or _memory is None:
+    if _orchestrator is None or _memory is None or _runtime is None:
         raise HTTPException(503, "服务未就绪")
 
     from agents.agent_orchestrator import Request as OrcReq
     from memory.conversation_memory import MsgRole
 
     conv_id = req.conv_id or str(uuid.uuid4())
+    run_id = str(uuid.uuid4())
 
-    # 1. 读取记忆上下文
-    mem_ctx = await _memory.get_context(req.user_id, conv_id, query=req.message)
+    # 0. 会话级执行锁：token + TTL。拿不到说明另一条消息正在该会话内运行。
+    lock_token = _runtime.acquire_turn_lock(conv_id, run_id)
+    if lock_token is None:
+        active = _runtime.active_lock(conv_id)
+        TURN_LOCK_CONFLICTS.inc()
+        raise HTTPException(
+            409,
+            detail={
+                "error": "conversation_run_active",
+                "message": "该会话正在处理上一条消息，请稍后重试或使用新会话。",
+                "active_run_id": (active or {}).get("run_id", ""),
+            },
+        )
 
-    # 2. 构建编排请求（含对话历史，用于意图识别上下文）
-    history = [
-        {"role": m.role.value, "content": m.content}
-        for m in mem_ctx.recent_messages[-5:]
-    ] if mem_ctx.recent_messages else None
-
-    intent_result = await _orchestrator.recognize_intent(req.message, history=history)
-    full_context = mem_ctx.to_prompt_text()
-
-    orch_req = OrcReq(
-        message=req.message,
-        user_id=req.user_id,
-        conv_id=conv_id,
-        context=full_context,
-        history=history,
-        entities=intent_result.entities,
-        intent=intent_result.intent,
-        intent_group=intent_result.intent_group,
-        urgency=intent_result.urgency,
-        intent_confidence=intent_result.confidence,
-    )
-
-    # 3. 执行
-    result = await _orchestrator.run(orch_req)
-
-    # 4. 写入记忆
-    await _memory.add_message(req.user_id, conv_id, MsgRole.USER, req.message)
-    await _memory.add_message(req.user_id, conv_id, MsgRole.ASSISTANT, result.response)
-
-    # 5. 异步更新用户画像（不阻塞响应）
-    asyncio.create_task(_memory.update_profile(req.user_id, conv_id))
-
-    return ChatResponse(
-        conv_id=conv_id,
-        request_id=result.request_id,
-        response=result.response,
-        intent=result.intent.value if result.intent else "other",
-        intent_group=intent_result.intent_group,
-        agent_type=result.agent_type.value,
-        agent_types=[agent_type.value for agent_type in result.agent_types],
-        primary_agent=result.primary_agent.value if result.primary_agent else result.agent_type.value,
-        supporting_agents=[agent_type.value for agent_type in result.supporting_agents],
-        tools_used=result.tools_used,
-        routing_reason=result.routing_reason,
-        routing_confidence=result.routing_confidence,
-        escalated=result.escalated,
-        latency_ms=round(result.latency_ms, 1),
-        knowledge_used="search_knowledge_base" in result.tools_used,
-        entities=intent_result.entities,
-        intent_confidence=round(intent_result.confidence, 4),
-        intent_source_scores=intent_result.source_scores,
-    )
-
-
-async def _build_knowledge_context(message: str, intent=None, top_k: int = 3) -> tuple[str, bool]:
-    """
-    为 /chat 主链路构建 RAG 知识上下文。
-
-    这里复用 MCPToolManager 的查询改写、并行召回、重排、fallback 能力。
-    """
-    if _tool_manager is None:
-        return "", False
-    if not _should_use_knowledge(message, intent=intent):
-        return "", False
+    ticket_id: Optional[str] = None
     try:
-        result = await _tool_manager.search_with_rewrite("knowledge_search", message, top_k=top_k)
-        if not result.success or not isinstance(result.data, list) or not result.data:
-            return "", False
+        # 1. 读取记忆上下文
+        mem_ctx = await _memory.get_context(req.user_id, conv_id, query=req.message)
 
-        parts = ["[知识库检索结果]"]
-        used = False
-        for i, item in enumerate(result.data[:top_k], start=1):
-            if not isinstance(item, dict):
-                continue
-            title = str(item.get("title", "未命名文档"))
-            content = str(item.get("content", "")).strip()
-            score = item.get("score", "")
-            if not content:
-                continue
-            used = True
-            parts.append(f"{i}. 标题: {title}\n   相关度: {score}\n   内容: {content[:600]}")
+        history = [
+            {"role": m.role.value, "content": m.content}
+            for m in mem_ctx.recent_messages[-5:]
+        ] if mem_ctx.recent_messages else None
 
-        if not used:
-            return "", False
-        parts.append("请优先依据以上知识库内容回答；如果知识库内容不足，再结合通用客服能力说明。")
-        return "\n".join(parts), True
+        intent_result = await _orchestrator.recognize_intent(req.message, history=history)
+
+        # 修订意见回流：会话内有带修订意见的 pending 工单时，本轮运行自动
+        # 携带最新一轮坐席要求——"AI 建议 → 人工 revise → AI 带要求重跑"闭环。
+        revision = _runtime.latest_pending_revision(conv_id)
+        full_context = mem_ctx.to_prompt_text()
+        revision_applied: Optional[Dict[str, Any]] = None
+        if revision:
+            revision_applied = {
+                "ticket_id": revision["ticket_id"],
+                "revision_count": revision["revision_count"],
+                "revision_note": revision["revision_note"],
+            }
+            full_context += (
+                f"\n\n[人工坐席修订意见（工单 {revision['ticket_id']}，"
+                f"第 {revision['revision_count']} 轮修订）]\n"
+                f"{revision['revision_note']}\n本轮回复必须先满足上述修订要求。"
+            )
+
+        # 2. 运行建档：用户消息与运行事件先落库，模型执行只负责产生新事件
+        _runtime.create_run(
+            run_id, conv_id, req.user_id,
+            intent=intent_result.intent.value if intent_result.intent else "other",
+        )
+        _runtime.append_message(conv_id, run_id, MsgRole.USER.value, req.message)
+        _runtime.append_event(run_id, "message.user", {"content": req.message})
+        if revision_applied:
+            _runtime.append_event(run_id, "handoff.revision_applied", dict(revision_applied))
+
+        orch_req = OrcReq(
+            message=req.message,
+            user_id=req.user_id,
+            conv_id=conv_id,
+            context=full_context,
+            history=history,
+            entities=intent_result.entities,
+            intent=intent_result.intent,
+            intent_group=intent_result.intent_group,
+            urgency=intent_result.urgency,
+            intent_confidence=intent_result.confidence,
+        )
+
+        # 3. 执行
+        result = await _orchestrator.run(orch_req)
+
+        # 4. 路由决策、工具调用、最终回复依次落库，形成可回放的运行事件流
+        _runtime.append_event(run_id, "route", {
+            "primary_agent": result.primary_agent.value if result.primary_agent else result.agent_type.value,
+            "supporting_agents": [a.value for a in result.supporting_agents],
+            "routing_reason": result.routing_reason,
+            "routing_confidence": result.routing_confidence,
+            "intent": intent_result.intent.value if intent_result.intent else "other",
+            "intent_group": intent_result.intent_group,
+        })
+        for trace in result.tool_traces:
+            _runtime.append_event(run_id, "tool", trace)
+        _runtime.append_message(conv_id, run_id, MsgRole.ASSISTANT.value, result.response)
+        _runtime.append_event(run_id, "message.assistant", {"content": result.response})
+
+        # 5. 升级 → 生成待人工确认的处置工单（AI 建议默认不自动执行）
+        if result.escalated:
+            is_crisis = any(kw in req.message for kw in CRISIS_KEYWORDS)
+            urgency_is_critical = intent_result.urgency is not None and intent_result.urgency.name == "CRITICAL"
+            priority = 1 if (is_crisis or urgency_is_critical) else 2
+            ticket_id = _runtime.create_handoff(
+                run_id=run_id,
+                conv_id=conv_id,
+                user_id=req.user_id,
+                kind="crisis" if is_crisis else "handoff",
+                summary=result.response,
+                draft={
+                    "intent": intent_result.intent.value if intent_result.intent else "other",
+                    "intent_group": intent_result.intent_group,
+                    "urgency": intent_result.urgency.name if intent_result.urgency else None,
+                    "entities": intent_result.entities,
+                    "tools_used": result.tools_used,
+                    "request_id": result.request_id,
+                },
+                priority=priority,
+            )
+            _runtime.append_event(run_id, "handoff.created", {"ticket_id": ticket_id})
+
+        # 6. 条件终态更新：重复回调不会重复终结
+        _runtime.finish_run(run_id, "completed", escalated=result.escalated, agent_type=result.agent_type.value)
+
+        # 7. 业务指标：轮次、时延（详见 /metrics）
+        CHAT_TURNS.labels(
+            intent_group=intent_result.intent_group or "other",
+            escalated=str(bool(result.escalated)).lower(),
+        ).inc()
+        RUN_LATENCY.labels(agent_type=result.agent_type.value).observe(result.latency_ms / 1000.0)
+
+        # 7. 审计与业务同库留痕
+        _runtime.audit(
+            action="chat.turn",
+            user_id=req.user_id,
+            conv_id=conv_id,
+            run_id=run_id,
+            resource_type="run",
+            resource_id=run_id,
+            details={
+                "intent": intent_result.intent.value if intent_result.intent else "other",
+                "agent_type": result.agent_type.value,
+                "escalated": result.escalated,
+                "tools_used": result.tools_used,
+                "latency_ms": round(result.latency_ms, 1),
+                "ticket_id": ticket_id,
+            },
+        )
+
+        # 8. 写入记忆
+        await _memory.add_message(req.user_id, conv_id, MsgRole.USER, req.message)
+        await _memory.add_message(req.user_id, conv_id, MsgRole.ASSISTANT, result.response)
+
+        # 9. 异步更新用户画像（不阻塞响应）
+        asyncio.create_task(_memory.update_profile(req.user_id, conv_id))
+
+        return ChatResponse(
+            conv_id=conv_id,
+            run_id=run_id,
+            request_id=result.request_id,
+            response=result.response,
+            intent=result.intent.value if result.intent else "other",
+            intent_group=intent_result.intent_group,
+            agent_type=result.agent_type.value,
+            agent_types=[agent_type.value for agent_type in result.agent_types],
+            primary_agent=result.primary_agent.value if result.primary_agent else result.agent_type.value,
+            supporting_agents=[agent_type.value for agent_type in result.supporting_agents],
+            tools_used=result.tools_used,
+            routing_reason=result.routing_reason,
+            routing_confidence=result.routing_confidence,
+            escalated=result.escalated,
+            ticket_id=ticket_id,
+            revision_applied=revision_applied,
+            latency_ms=round(result.latency_ms, 1),
+            knowledge_used="search_knowledge_base" in result.tools_used,
+            entities=intent_result.entities,
+            intent_confidence=round(intent_result.confidence, 4),
+            intent_source_scores=intent_result.source_scores,
+        )
+    except HTTPException:
+        raise
     except Exception as ex:
-        logger.warning(f"构建知识库上下文失败: {ex}")
-        return "", False
-
-
-def _should_use_knowledge(message: str, intent=None) -> bool:
-    """跳过纯寒暄，业务类问题才检索知识库，避免无关 RAG 干扰回复。"""
-    msg = (message or "").strip().lower()
-    if not msg:
-        return False
-    intent_value = getattr(intent, "value", intent)
-    if intent_value in {"greeting", "feedback", "escalation", "human_handoff", "other"}:
-        return False
-    if intent_value in {
-        "query", "request", "technical", "billing", "account", "complaint",
-        "order_status", "logistics", "refund", "invoice", "payment_issue",
-        "account_security", "technical_login", "technical_crash",
-    }:
-        return True
-    greetings = {"你好", "您好", "嗨", "hi", "hello", "hey", "早上好", "晚上好"}
-    if msg in greetings:
-        return False
-    business_keywords = [
-        "退款", "订单", "物流", "配送", "发票", "扣款", "支付", "账单", "订阅",
-        "登录", "报错", "错误", "崩溃", "会员", "积分", "账户", "密码", "地址",
-        "refund", "order", "invoice", "payment", "error", "login",
-    ]
-    return len(msg) >= 4 or any(kw in msg for kw in business_keywords)
+        logger.exception("会话 %s 运行 %s 执行失败", conv_id, run_id)
+        _runtime.append_event(run_id, "run.failed", {"error": str(ex)})
+        _runtime.finish_run(run_id, "failed")
+        _runtime.audit(
+            action="chat.failed",
+            user_id=req.user_id,
+            conv_id=conv_id,
+            run_id=run_id,
+            resource_type="run",
+            resource_id=run_id,
+            details={"error": str(ex)},
+        )
+        raise HTTPException(500, "处理请求时出现问题，请稍后重试")
+    finally:
+        _runtime.release_turn_lock(conv_id, lock_token)
 
 
 @app.get("/monitor")
@@ -437,13 +555,150 @@ async def list_recent_tool_traces(limit: int = 20):
     return RecentToolTracesResponse(items=_orchestrator.get_recent_tool_traces(limit=limit))
 
 
+# ── 运行时查询：回放 / 工单 / 审计 ────────────────────────────────────────────
+
+@app.get("/runs/{run_id}", tags=["Runtime"], dependencies=_PROTECTED)
+async def get_run(run_id: str):
+    """查询单次运行的档案：状态、意图、事件数。"""
+    if _runtime is None:
+        raise HTTPException(503, "服务未就绪")
+    run = _runtime.get_run(run_id)
+    if run is None:
+        raise HTTPException(404, "运行不存在")
+    events = _runtime.list_events(run_id)
+    return {"run": run, "event_count": len(events), "last_seq": events[-1]["seq"] if events else 0}
+
+
+@app.get("/runs/{run_id}/events", tags=["Runtime"], dependencies=_PROTECTED)
+async def replay_run_events(run_id: str, after_seq: int = 0):
+    """增量回放一次运行的事件流（断线恢复入口）。
+
+    客户端记录已消费的最大 seq，重连后带 after_seq 续读，
+    不重复消费也不漏事件。运行中断时已产生的事件仍然可读。
+    """
+    if _runtime is None:
+        raise HTTPException(503, "服务未就绪")
+    run = _runtime.get_run(run_id)
+    if run is None:
+        raise HTTPException(404, "运行不存在")
+    events = _runtime.list_events(run_id, after_seq=after_seq)
+    return {"run_id": run_id, "status": run["status"], "after_seq": after_seq, "events": events}
+
+
+class RunCancelInput(BaseModel):
+    """取消运行输入。用于坐席/运维终止卡住的运行或崩溃残留的僵尸运行。"""
+    reason: str = ""
+    actor: str = "agent-console"
+
+
+@app.post("/runs/{run_id}/cancel", tags=["Runtime"], dependencies=_PROTECTED)
+async def cancel_run(run_id: str, body: RunCancelInput):
+    """取消一次运行：条件更新 running → cancelled，审计同事务落库。
+
+    running 的三个终态（completed / failed / cancelled）由此全部可达；
+    已终结的运行重复取消返回 409（幂等 no-op，不覆盖已有终态）。
+    服务启动时的僵尸对账走同一条 store.cancel_run 路径，审计口径一致。
+    """
+    if _runtime is None:
+        raise HTTPException(503, "服务未就绪")
+    run = _runtime.get_run(run_id)
+    if run is None:
+        raise HTTPException(404, "运行不存在")
+    if not _runtime.cancel_run(run_id, reason=body.reason, actor=body.actor):
+        raise HTTPException(
+            409,
+            detail={"error": "run_not_running", "current_status": run["status"]},
+        )
+    RUN_CANCELLATIONS.labels(source="api").inc()
+    return {"run": _runtime.get_run(run_id)}
+
+
+@app.get("/conversations/{conv_id}/messages", tags=["Runtime"], dependencies=_PROTECTED)
+async def get_conversation_messages(conv_id: str, limit: int = 100):
+    """会话全文记录（已脱敏），供人工坐席接手时阅读上下文。"""
+    if _runtime is None:
+        raise HTTPException(503, "服务未就绪")
+    return {"conv_id": conv_id, "messages": _runtime.list_messages(conv_id, limit=limit)}
+
+
+class HandoffResolveInput(BaseModel):
+    """人工裁决输入。decision: accept（接管处理）/ reject（误报关闭）/ revise（补充要求，保持待处理）。"""
+    decision: str
+    note: str = ""
+    resolver: str = "agent-console"
+
+
+@app.get("/handoffs", tags=["Handoff"], dependencies=_PROTECTED)
+async def list_handoffs(status: Optional[str] = "pending", limit: int = 50):
+    """人工坐席工作队列：默认列出待处理的升级工单，按优先级和时间排序。"""
+    if _runtime is None:
+        raise HTTPException(503, "服务未就绪")
+    return {"items": _runtime.list_handoffs(status=status, limit=limit)}
+
+
+@app.get("/handoffs/{ticket_id}", tags=["Handoff"], dependencies=_PROTECTED)
+async def get_handoff(ticket_id: str):
+    if _runtime is None:
+        raise HTTPException(503, "服务未就绪")
+    ticket = _runtime.get_handoff(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "工单不存在")
+    return ticket
+
+
+@app.post("/handoffs/{ticket_id}/resolve", tags=["Handoff"], dependencies=_PROTECTED)
+async def resolve_handoff(ticket_id: str, body: HandoffResolveInput):
+    """人工裁决升级工单（人工确认门）。
+
+    裁决串行在 pending 状态上：并发或重复提交只有一个生效，其余返回 409，
+    不会重复执行业务。revise 保留原建议单并把修订意见回写原运行事件流。
+    """
+    if _runtime is None:
+        raise HTTPException(503, "服务未就绪")
+    ticket = _runtime.get_handoff(ticket_id)
+    if ticket is None:
+        raise HTTPException(404, "工单不存在")
+    resolved = _runtime.resolve_handoff(
+        ticket_id,
+        body.decision,
+        note=body.note,
+        resolver=body.resolver or "agent-console",
+    )
+    if resolved is None:
+        raise HTTPException(
+            409,
+            detail={
+                "error": "handoff_already_resolved",
+                "message": "该工单已被处理，请刷新后查看最新状态。",
+                "current_status": ticket["status"],
+            },
+        )
+    HANDOFF_RESOLUTIONS.labels(decision=body.decision).inc()
+    if body.decision == "revise":
+        _runtime.append_event(ticket["run_id"], "handoff.revision_requested", {
+            "ticket_id": ticket_id,
+            "note": body.note,
+            "revision_count": resolved["revision_count"],
+        })
+    return resolved
+
+
+@app.get("/audit", tags=["Runtime"], dependencies=_PROTECTED)
+async def list_audit(action: str = "", resource_type: str = "", resource_id: str = "", limit: int = 100):
+    """审计流水查询：与业务写入同事务产生，支撑事后追责与合规检查。"""
+    if _runtime is None:
+        raise HTTPException(503, "服务未就绪")
+    return {"items": _runtime.list_audit(action=action, resource_type=resource_type, resource_id=resource_id, limit=limit)}
+
+
 @app.get("/metrics")
 async def prometheus_metrics():
-    """Prometheus 指标入口。"""
+    """Prometheus 指标入口：进程默认指标 + creditlife_* 业务指标
+    （轮次/时延/锁冲突/工单裁决/运行取消）。"""
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-@app.post("/search")
+@app.post("/search", dependencies=_PROTECTED)
 async def search(query: str, top_k: int = 5):
     """
     演示检索优化链路：查询改写 → 并行召回 → 重排 → Top-K。
@@ -493,7 +748,7 @@ class EvalRunInput(BaseModel):
     save_baseline: bool = False
 
 
-@app.post("/knowledge/add", tags=["知识库"])
+@app.post("/knowledge/add", tags=["知识库"], dependencies=_PROTECTED)
 async def add_knowledge(body: BatchDocInput):
     """
     批量导入文档到知识库。
@@ -520,7 +775,7 @@ async def add_knowledge(body: BatchDocInput):
     return {"message": f"成功导入 {count} 个文档片段", "added_chunks": count, "total_chunks": total}
 
 
-@app.post("/knowledge/upload", tags=["知识库"])
+@app.post("/knowledge/upload", tags=["知识库"], dependencies=_PROTECTED)
 async def upload_knowledge(file: UploadFile = File(...)):
     """
     上传文件导入知识库。
@@ -576,7 +831,7 @@ async def knowledge_stats():
     return {"total_chunks": await kb.doc_count_async()}
 
 
-@app.post("/eval/run")
+@app.post("/eval/run", dependencies=_PROTECTED)
 async def run_eval(body: Optional[EvalRunInput] = None):
     """运行内置评测用例，返回评测报告。"""
     if _evaluator is None:

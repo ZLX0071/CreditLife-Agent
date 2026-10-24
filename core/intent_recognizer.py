@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from anthropic import AsyncAnthropic
 
+from core.config import DEFAULT_MODEL
 from core.llm_utils import extract_text_content
 
 logger = logging.getLogger(__name__)
@@ -149,7 +150,7 @@ class IntentRecognizer:
         self,
         api_key: str,
         base_url: Optional[str] = None,
-        model: str = "claude-3-5-sonnet-20241022",
+        model: str = DEFAULT_MODEL,
         confidence_threshold: float = 0.5,
     ):
         kwargs: Dict[str, Any] = {"api_key": api_key}

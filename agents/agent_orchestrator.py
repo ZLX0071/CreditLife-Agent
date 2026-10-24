@@ -38,6 +38,7 @@ from agents.tools import (
     general_tools,
     technical_tools,
 )
+from core.config import CRISIS_KEYWORDS, DEFAULT_MODEL
 from core.intent_recognizer import IntentCategory, IntentRecognizer, UrgencyLevel
 from core.llm_utils import extract_text_content
 
@@ -550,8 +551,7 @@ class EscalationAgent(BaseAgent):
         urgency = req.urgency.name if req.urgency else "UNKNOWN"
         entities = json.dumps(req.entities or {}, ensure_ascii=False)
         # 危机干预分支：确定性代码处理极端情绪，不交给概率模型
-        crisis_keywords = ("轻生", "跳楼", "不想活", "活不下去", "自残", "自杀", "逼死")
-        if any(kw in req.message for kw in crisis_keywords):
+        if any(kw in req.message for kw in CRISIS_KEYWORDS):
             content = (
                 "听到您现在这么说，我很担心您。先暂停所有业务话题，您的人身安全永远是第一位的。\n\n"
                 "如果您愿意，请拨打全国心理援助热线 12356，或您当地的心理援助渠道，"
@@ -570,10 +570,59 @@ class EscalationAgent(BaseAgent):
                 escalate=True,
                 tools_used=[],
             )
+        # 交接摘要走确定性工具生成（本节点不调 LLM），
+        # 工具产出同时进入 tool_traces，让升级链路也有可审计的执行痕迹。
+        handoff_summary: Dict[str, Any] = {}
+        tools_used: List[str] = []
+        tool_traces: List[Dict[str, Any]] = []
+        reason = f"意图={intent}，紧急度={urgency}"
+        spec = self.get_tools().get("create_handoff_summary")
+        if spec is not None:
+            tool_t0 = time.monotonic()
+            try:
+                result = spec.handler(req, {"reason": reason})
+                if inspect.isawaitable(result):
+                    result = await result
+                handoff_summary = result if isinstance(result, dict) else {}
+                tools_used.append(spec.name)
+                tool_traces.append({
+                    "agent_type": self.agent_type.value,
+                    "tool_name": spec.name,
+                    "tool_use_id": "",
+                    "input": {"reason": reason},
+                    "success": True,
+                    "result_success": bool(handoff_summary),
+                    "latency_ms": round((time.monotonic() - tool_t0) * 1000, 1),
+                    "cached": False,
+                    "reranked": False,
+                    "error": "",
+                })
+            except Exception as ex:
+                logger.warning("生成人工交接摘要失败: %s", ex)
+                tool_traces.append({
+                    "agent_type": self.agent_type.value,
+                    "tool_name": spec.name,
+                    "tool_use_id": "",
+                    "input": {"reason": reason},
+                    "success": False,
+                    "result_success": None,
+                    "latency_ms": round((time.monotonic() - tool_t0) * 1000, 1),
+                    "cached": False,
+                    "reranked": False,
+                    "error": str(ex),
+                })
+        summary_text = ""
+        if handoff_summary:
+            summary_text = (
+                f"交接摘要：升级原因={handoff_summary.get('reason', reason)}；"
+                f"意图={handoff_summary.get('intent', intent)}；"
+                f"紧急度={handoff_summary.get('urgency', urgency)}\n"
+            )
         content = (
             "我已将这个问题标记为人工升级处理。\n\n"
-            f"升级原因：意图={intent}，紧急度={urgency}\n"
+            f"升级原因：{reason}\n"
             f"已记录信息：{entities}\n"
+            + summary_text +
             "请不要发送密码、短信验证码或完整支付凭证；人工客服会根据会话记录继续核验。"
         )
         ms = (time.monotonic() - t0) * 1000
@@ -585,7 +634,8 @@ class EscalationAgent(BaseAgent):
             success=True,
             latency_ms=ms,
             escalate=True,
-            tools_used=[],
+            tools_used=tools_used,
+            tool_traces=tool_traces,
         )
 
 
@@ -673,7 +723,7 @@ class AgentOrchestrator:
         self,
         api_key:  str,
         base_url: Optional[str] = None,
-        model:    str = "claude-3-5-sonnet-20241022",
+        model:    str = DEFAULT_MODEL,
         skill_manager: Optional[Any] = None,
         rag_tool_manager: Optional[Any] = None,
     ):
@@ -905,8 +955,7 @@ class AgentOrchestrator:
         """
         # 危机干预前置拦截：确定性触发，不依赖意图识别的概率投票。
         # 任何涉及轻生/自伤倾向的消息必须无条件直达人工升级，先于一切业务路由。
-        crisis_keywords = ("轻生", "跳楼", "不想活", "活不下去", "自残", "自杀", "逼死")
-        if any(kw in req.message for kw in crisis_keywords):
+        if any(kw in req.message for kw in CRISIS_KEYWORDS):
             return RoutingDecision(
                 primary_agent=AgentType.ESCALATION,
                 reason="命中危机干预关键词，确定性升级路由",
